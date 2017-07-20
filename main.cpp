@@ -424,7 +424,7 @@ void RandomCapture(CvCallbackParam* param)
 //* cvSetMouseCallback function
 //*/
 void mouse_Callback(int event, int x, int y, int flags, void* paramData)
-	{
+{
 	CvCallbackParam *param = (CvCallbackParam *)paramData;
 
 	// Fix Error
@@ -434,9 +434,9 @@ void mouse_Callback(int event, int x, int y, int flags, void* paramData)
 	// Handle zoom
 	double zoomFactor = 0.9, maxZoomLevel = 0.7;
 	if (flags == (cv::EVENT_FLAG_CTRLKEY + cv::EVENT_RBUTTONDOWN) && param->zoomLevel > maxZoomLevel)
-		{
+	{
 		cout << "Zoom In  while pressing CTRL key - position (" << x << ", " << y << ")" << endl;
-		param->zoomLevel = param->zoomLevel * zoomFactor;
+		param->zoomLevel = (float)param->zoomLevel * zoomFactor;
 		cv::Rect roi((int)(x * param->zoomLevel), (int)(y * param->zoomLevel),
 			(int)(param->zoomLevel * param->img_src.size().width - x),
 			(int)(param->zoomLevel * param->img_src.size().height - y));
@@ -445,75 +445,92 @@ void mouse_Callback(int event, int x, int y, int flags, void* paramData)
 		param->img_display = param->img_src(roi);
 		resize(param->img_display, param->img_display, cv::Size(param->img_src.size()));
 		renderWindows(param);
-		}
+	}
 	else if (flags == (cv::EVENT_FLAG_CTRLKEY + cv::EVENT_LBUTTONDOWN) && param->zoomLevel < 1)
-		{
+	{
 		param->updateDisplayImg();
 		renderWindows(param);
-		}
-	
+	}
+
+
 	status.hit_point = cvPoint(x, y);
 	switch (event)
+	{
+
+
+	case CV_EVENT_MOUSEMOVE:
+
+		if (status.moveRect)
+		{
+			if (status.hit_point.x + status.pickUp_point.x > 0 &&
+				status.hit_point.y + status.pickUp_point.y > 0 &&
+				status.hit_point.x + status.pickUp_point.x + param->ROI.width < param->img_display.size().width &&
+				status.hit_point.y + status.pickUp_point.y + param->ROI.height < param->img_display.size().height)
+			{
+				cv::Rect tmpROI(param->ROI);
+				tmpROI.x = status.hit_point.x + status.pickUp_point.x;
+				tmpROI.y = status.hit_point.y + status.pickUp_point.y;
+				if (tmpROI.br().x < param->img_display.size().width && tmpROI.br().y < param->img_display.size().height
+					&& tmpROI.br().x > 0 && tmpROI.br().y > 0)
+					param->ROI = tmpROI;
+			}
+		}
+		else if (status.resize_rect)
 		{
 
+			if (param->ROI.x + max(status.hit_point.x - param->ROI.x, param->maxRecSiz) < param->img_display.size().width &&
+				param->ROI.y + max(status.hit_point.y - param->ROI.y, param->maxRecSiz) < param->img_display.size().height)
+			{
+				int  ave = (int)max(max(status.hit_point.x - param->ROI.x, param->maxRecSiz), max(status.hit_point.y - param->ROI.y, param->maxRecSiz));
+				cv::Rect tmpROI(param->ROI);
+				tmpROI.width = ave;
+				tmpROI.height = ave;
+				if (tmpROI.br().x < param->img_display.size().width && tmpROI.br().y < param->img_display.size().height
+					&& tmpROI.br().x > 0 && tmpROI.br().y > 0)
+					param->ROI = tmpROI;
+			}
 
-		case CV_EVENT_MOUSEMOVE:
-			if (status.moveRect)
-				{
-				if (status.hit_point.x + status.pickUp_point.x > 0 &&
-					status.hit_point.y + status.pickUp_point.y > 0 &&
-					status.hit_point.x + status.pickUp_point.x + param->ROI.width < param->img_display.size().width &&
-					status.hit_point.y + status.pickUp_point.y + param->ROI.height < param->img_display.size().height)
-					{
-					param->ROI.x = status.hit_point.x + status.pickUp_point.x;
-					param->ROI.y = status.hit_point.y + status.pickUp_point.y;
+		}
 
-					}
-				renderWindows(param);
-				}
-			else if (status.resize_rect)
-				{
+		renderWindows(param);
+		break;
+		// Click Left Button
+	case CV_EVENT_LBUTTONDOWN:
 
-				if (param->ROI.x + max(status.hit_point.x - param->ROI.x, param->maxRecSiz) < param->img_display.size().width && 
-					param->ROI.y + max(status.hit_point.y - param->ROI.y, param->maxRecSiz) < param->img_display.size().height)
-					{
-					param->ROI.width = (int)max(status.hit_point.x - param->ROI.x, param->maxRecSiz);
-					param->ROI.height = (int)max(status.hit_point.y - param->ROI.y, param->maxRecSiz);
-					}
-				renderWindows(param);
-				}
-			break;
-			// Click Left Button
-		case CV_EVENT_LBUTTONDOWN:
-				
-			status.moveRect = false;
-			status.resize_rect = false;
-			status.clickStatus = checkPoint2Box(param, status.hit_point);
-			if (status.clickStatus == CENTER_CLICKED)		// Just move
-				{
-				status.moveRect = true;
-				status.pickUp_point = - status.hit_point;
-				status.pickUp_point.x += param->ROI.x;
-				status.pickUp_point.y += param->ROI.y;
-				
-				}
-			else if (status.clickStatus == CORNER_CLICKED)	// Resize
-				status.resize_rect = true;
-				
-			break;
-		
-			// Right button release
-		case CV_EVENT_LBUTTONUP:
-			status.moveRect = false;
-			status.resize_rect = false;
-			break;
-		}	
-		
-		
-		
-		
-		
+		status.moveRect = false;
+		status.resize_rect = false;
+		status.clickStatus = checkPoint2Box(param, status.hit_point);
+		if (status.clickStatus == CENTER_CLICKED)		// Just move
+		{
+			status.moveRect = true;
+			status.pickUp_point = -status.hit_point;
+			status.pickUp_point.x += param->ROI.x;
+			status.pickUp_point.y += param->ROI.y;
+
+		}
+		else if (status.clickStatus == CORNER_CLICKED)	// Resize
+			status.resize_rect = true;
+
+		break;
+
+		// Right button release
+	case CV_EVENT_LBUTTONUP:
+
+		status.moveRect = false;
+		status.resize_rect = false;
+		break;
+
+		// Undefined
+	case CV_EVENT_RBUTTONDOWN:
+	case CV_EVENT_MBUTTONDOWN:
+	case CV_EVENT_RBUTTONUP:
+	case CV_EVENT_MBUTTONUP:
+	case CV_EVENT_LBUTTONDBLCLK:
+	case CV_EVENT_RBUTTONDBLCLK:
+	case CV_EVENT_MBUTTONDBLCLK:
+		break;
 	}
+}
 
 
 
