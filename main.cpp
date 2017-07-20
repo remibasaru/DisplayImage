@@ -8,14 +8,31 @@
 #include <string>
 #include <stack>
 #include <vector>
+#include <fstream>
+
 
 #define max(x, y) x > y ? x : y
 #define min(x, y) x < y ? x : y
 
+#define  RESHAPE_SIZE_WIDTH 640
+#define  RESHAPE_SIZE_HEIGHT 480
+
+
+#ifdef WIN32
+	#include <windows.h>
+	
+#elif  __linux__
+	#include <sys/types.h>
+	#include <sys/stat.h>
+	#include <unistd.h>
+	
+#endif // WIN32
+
+
 using namespace std;
 using namespace cv;
 
-std::string statusFileName = "..//Data//Statusinfo.txt";
+std::string statusFileName = "Data//Statusinfo.txt";
 enum ClickStatus { CENTER_CLICKED, CORNER_CLICKED, NO_TARGET_CLICKED }; // possible click status
 
 // Mouse Callback Data Structure
@@ -53,7 +70,8 @@ struct CvCallbackParam
 	{
 	std::string w1nam;
 	std::string w2nam;
-	std::string outputFolder;
+	std::string outputFolderNeg;
+	std::string outputFolderPos;
 	std::string templateFilename;
 	int savedNegFileIdx, savedPosFileIdx;
 	cv::Mat img_src;
@@ -83,8 +101,8 @@ struct CvCallbackParam
 		this->color = cvScalar(0, 255, 0);
 		this->savedNegFileIdx = _negIdx;
 		this->savedPosFileIdx = _posIdx;
-		this->templateFilename = "Patch";
-		this->outputFolder = "";
+		this->outputFolderNeg = "";
+		this->outputFolderPos = "";
 		this->maxRecSiz = 10;
 		this->zoomLevel = 1;
 		this->numOfNegSampleperFrame = 40;
@@ -98,6 +116,7 @@ struct CvCallbackParam
 		}
 	void updateDisplayImg()
 		{
+		cv::resize(this->img_src, this->img_src, cv::Size(RESHAPE_SIZE_WIDTH, RESHAPE_SIZE_HEIGHT));
 		this->zoomLevel = 1;
 		this->img_display = this->img_src;
 		}
@@ -129,10 +148,14 @@ bool writeImage(CvCallbackParam *param, bool detectType, cv::Mat img);
 //*/
 int main(int argc, char *argv[])
 	{
-	//// parse arguments
-	//gui_usage();
+		
+	string fileName = "Data//testk12.avi";  // Set default video file name or directory with images 
+	if (argc > 1)
+		{
+		fileName = argv[1];
+		 
+		}
 	
-	string fileName = "Data//testk12.avi";  // Enter video file name or directory with images 
 	CvCallbackParam cvCallbackParam(fileName, 0, 0);
 	if (!load_reference(&cvCallbackParam))
 		{
@@ -160,42 +183,47 @@ bool load_reference(CvCallbackParam* param)
 	bool is_directory = false;
 	bool is_image = false;
 	bool is_video = false;
+	
+	// Attempt to load last writing position
+	ifstream myfile;
+	myfile.open(statusFileName.c_str());
+	
+	if (myfile.is_open())
+		{
+		
+		try
+			{
+			std::string line;
+			std::vector<std::string> allLines;
+			while (std::getline(myfile, line))
+				{
+		 
+				allLines.push_back(line);
+				}
+			param->outputFolderNeg = allLines.at(0);
+			param->outputFolderPos = allLines.at(1);
+			param->savedNegFileIdx = atoi(allLines.at(2).c_str());
+			param->savedPosFileIdx = atoi(allLines.at(3).c_str());
+			
+			}
+		catch (exception e)
+			{
+
+			}
+			
+		myfile.close();
+		}
+
 	//~ DWORD dwAttrib = GetFileAttributes(param->fileName.c_str());
-//~ 
-	//~ // Attempt to load last writing position
-	//~ std::ifstream myfile(statusFileName);
 	//~ 
-	//~ if (myfile.is_open())
-		//~ {
-		//~ 
-		//~ try
-			//~ {
-			//~ std::string line;
-			//~ std::vector<std::string> allLines;
-			//~ while (std::getline(myfile, line))
-				//~ {
-				//~ 
-				//~ allLines.push_back(line);
-				//~ }
-			//~ param->outputFolder = allLines.at(0);
-			//~ param->savedNegFileIdx = atoi(allLines.at(1).c_str());
-			//~ param->savedPosFileIdx = atoi(allLines.at(2).c_str());
-			//~ }
-		//~ catch (exception e)
-			//~ {
-//~ 
-			//~ }
-		//~ myfile.close();
-		//~ }
-
-
 	//Load picture file(s) to be clipped
 	//~ if (dwAttrib == -1)      // Check if is valid file directory
 		//~ {
 		//~ cerr << "Invalid file path!";
 		//~ return false;
 		//~ }	
-	//~ else if(dwAttrib == FILE_ATTRIBUTE_DIRECTORY)     // Check if is folder directory
+	//~ else if(dwAttrib == FILstruct stat st = {0};
+
 		//~ {
 		//~ is_directory = true;
 		//~ param->cap = false;
@@ -251,7 +279,7 @@ bool load_reference(CvCallbackParam* param)
 		//param->videoCapture.set(CV_CAP_PROP_POS_FRAMES, (double)param->frame);
 		if (!param->videoCapture.read(param->img_src))
 			{
-			cerr << "Image index position out of range!";
+			std::cerr << "Image index position out of range!";
 			return false;
 			}
 		param->updateDisplayImg();
@@ -373,17 +401,18 @@ void key_callback(CvCallbackParam *param)
 			}
 		
 		// Exit
-		else if (key == 'q' || key == 27) // 27 is ESC
+		else if (key == 'q') 
 			{
-			//~ std::ofstream myfile;
-			//~ if (!param->outputFolder.empty())
-				//~ {
-				//~ myfile.open(statusFileName);
-				//~ myfile << param->outputFolder << endl;
-				//~ myfile << param->savedNegFileIdx << endl;
-				//~ myfile << param->savedPosFileIdx << endl;
-				//~ myfile.close();
-				//~ }
+			std::ofstream myfile;
+			if (!param->outputFolderPos.empty() && !param->outputFolderNeg.empty())
+				{
+				myfile.open(statusFileName.c_str());
+				myfile << param->outputFolderNeg << endl;
+				myfile << param->outputFolderPos << endl;
+				myfile << param->savedNegFileIdx << endl;
+				myfile << param->savedPosFileIdx << endl;
+				myfile.close();
+				}
 			
 			break;
 			}
@@ -602,7 +631,65 @@ void hndleKey(CvCallbackParam *param, char key)
 //*/
 bool writeImage(CvCallbackParam *param, bool detectType, cv::Mat img)
 	{
-	return false;
+		//std::string output_fileName = "";
+	std::ostringstream stringStream;
+	
+	if (param->outputFolderNeg.empty() || param->outputFolderPos.empty())
+		{
+			
+#ifdef WIN32
+
+			
+#elif  __linux__
+
+	
+	
+		param->outputFolderPos = "Data//Objects//";
+		param->outputFolderNeg = "Data//Background//";
+		struct stat st = {0};
+
+		if (stat(param->outputFolderPos.c_str(), &st) == -1) 
+			{
+			//std::cout<< "Try making directory";
+			mkdir(param->outputFolderPos.c_str(), 0700);
+			}
+		if (stat(param->outputFolderNeg.c_str(), &st) == -1) 
+			{
+			//std::cout<< "Try making directory";
+			mkdir(param->outputFolderNeg.c_str(), 0700);
+			}	
+		
+#elif  __unix__
+
+		std::cout<< "This is unix";
+	
+#endif // WIN32
+	
+		}
+
+	if (detectType)
+		stringStream << param->outputFolderPos << "Img" << param->savedPosFileIdx + 1 << ".bmp";
+	else
+		stringStream << param->outputFolderNeg << "Img" << param->savedNegFileIdx + 1<< ".bmp";
+
+
+	if (!cv::imwrite(stringStream.str(), img))
+		{
+		std::cerr << "Error saving the file:" << stringStream.str() << endl;
+		return false;
+		}
+	else if (detectType)
+		{
+		param->savedPosFileIdx++;
+		}
+	else
+		{
+		param->savedNegFileIdx++;
+		}
+		
+			
+		
+	return true;
 	}
 
 ///**
@@ -614,6 +701,13 @@ cv::Mat renderWindows(CvCallbackParam *param)
 	// Indicate Region of Interest window
 	cv::Mat tmpIm = param->img_display.clone();
 	cv::rectangle(tmpIm, param->refRecPoint, param->endRecPoint, param->color);
+	std::ostringstream outStream;
+	outStream << "Num. Pos Saved: " << param->savedPosFileIdx;
+	cv::putText(tmpIm, outStream.str(), cv::Point(0, RESHAPE_SIZE_HEIGHT - 40), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 2);
+	outStream.str("");
+	outStream << "Num. Neg Saved: " << param->savedNegFileIdx;
+	cv::putText(tmpIm, outStream.str(), cv::Point(0, RESHAPE_SIZE_HEIGHT - 20), cv::FONT_HERSHEY_SIMPLEX, 0.5, cv::Scalar(255, 255, 255), 2);
+
 	cv::imshow(param->w1nam, tmpIm);
 
 	// Crop and show image in second window
